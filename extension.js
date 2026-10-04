@@ -26,6 +26,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Pango from 'gi://Pango';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -35,7 +36,6 @@ const ACTION_SCALE = 0.75; // Delete/Enter buttons relative to the mic
 const ACTION_GAP = 10;
 const DANCE_MS = 60;
 const PARROT_SCALE = 1.0; // frame size relative to the button
-const PARROT_DROP = 0.06; // how far the frame is moved down, relative to the button
 const EDGE_MARGIN = 10;
 const DRAG_THRESHOLD = 14;
 const TAP_DEBOUNCE_MS = 300;
@@ -84,6 +84,7 @@ export default class SkeetExtension extends Extension {
         this._size = this._settings.get_int('button-size');
 
         this._frames = this._loadFrames();
+        this._frameCenter = this._measureFrames();
         this._frame = 0;
         this._danceId = 0;
         // The parrot is the button's background image, so St clips it to the
@@ -132,6 +133,8 @@ export default class SkeetExtension extends Extension {
                 this._applySize();
                 this._placeInBounds(false);
             })],
+            [this._settings, this._settings.connect('changed::icon-offset',
+                () => this._paintButton())],
             [this._settings, this._settings.connect('changed::live-captions', () => {
                 if (!this._settings.get_boolean('live-captions'))
                     this._bubble?.hide();
@@ -511,15 +514,48 @@ export default class SkeetExtension extends Extension {
         return [];
     }
 
-    // Paint the current frame filling the circle, nudged down so the bird
-    // sits inside the ring rather than poking out of the top.
+    // Where the drawing sits inside its frames: the centre of the box around
+    // every non-transparent pixel of all frames, as fractions of the frame.
+    // Frames often have uneven padding (the Party Parrot sits low), so this
+    // is what gets centred in the circle, not the frame itself.
+    _measureFrames() {
+        let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+        for (const uri of this._frames) {
+            try {
+                const p = GdkPixbuf.Pixbuf.new_from_file(Gio.File.new_for_uri(uri).get_path());
+                if (!p.get_has_alpha())
+                    continue;
+                const w = p.get_width(), h = p.get_height();
+                const n = p.get_n_channels(), rs = p.get_rowstride();
+                const px = p.get_pixels();
+                for (let y = 0; y < h; y += 2) {
+                    for (let x = 0; x < w; x += 2) {
+                        if (px[y * rs + x * n + 3] > 40) {
+                            x0 = Math.min(x0, x / w);
+                            x1 = Math.max(x1, x / w);
+                            y0 = Math.min(y0, y / h);
+                            y1 = Math.max(y1, y / h);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`skeet: could not measure ${uri}: ${e.message}`);
+            }
+        }
+        return x1 > x0 ? [(x0 + x1) / 2, (y0 + y1) / 2] : [0.5, 0.5];
+    }
+
+    // Paint the current frame filling the circle with the drawing centred
+    // in it (plus the icon-offset setting, for fine-tuning by eye).
     _paintButton() {
         const big = this._size;
         let style = `border-radius: ${big / 2}px;`;
         if (this._frames.length) {
             const img = Math.round(big * PARROT_SCALE);
-            const x = Math.round((big - img) / 2);
-            const y = Math.round((big - img) / 2 + big * PARROT_DROP);
+            const [cx, cy] = this._frameCenter;
+            const nudge = this._settings.get_int('icon-offset') / 100;
+            const x = Math.round((big - img) / 2 + (0.5 - cx) * img);
+            const y = Math.round((big - img) / 2 + (0.5 - cy) * img + nudge * big);
             style += ` background-image: url("${this._frames[this._frame]}");` +
                 ` background-size: ${img}px ${img}px;` +
                 ` background-position: ${x}px ${y}px; background-repeat: no-repeat;`;

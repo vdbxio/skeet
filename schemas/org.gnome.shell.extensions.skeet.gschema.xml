@@ -32,6 +32,12 @@
       <default>64</default>
       <summary>Mic button size in pixels</summary>
     </key>
+    <key name="icon-offset" type="i">
+      <range min="-30" max="30"/>
+      <default>0</default>
+      <summary>Move the button image up (negative) or down, in percent of the button size</summary>
+      <description>The image is centred automatically; this is for fine-tuning.</description>
+    </key>
     <key name="action-buttons" type="b">
       <default>true</default>
       <summary>Show Delete and Enter buttons after text is typed</summary>

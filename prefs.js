@@ -328,6 +328,14 @@ export default class SkeetPrefs extends ExtensionPreferences {
         settings.bind('button-size', sizeRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         look.add(sizeRow);
 
+        const offsetRow = new Adw.SpinRow({
+            title: 'Image position',
+            subtitle: 'Move the parrot up (negative) or down, in percent of the button.',
+            adjustment: new Gtk.Adjustment({lower: -30, upper: 30, step_increment: 1}),
+        });
+        settings.bind('icon-offset', offsetRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+        look.add(offsetRow);
+
         const captionRow = new Adw.SwitchRow({
             title: 'Live caption while recording',
             subtitle: 'Shows what it has heard so far. Off saves CPU while you talk.',
