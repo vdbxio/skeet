@@ -515,11 +515,14 @@ export default class SkeetExtension extends Extension {
     }
 
     // Where the drawing sits inside its frames: the centre of the box around
-    // every non-transparent pixel of all frames, as fractions of the frame.
+    // every non-transparent pixel of all frames, in units of frame width.
     // Frames often have uneven padding (the Party Parrot sits low), so this
-    // is what gets centred in the circle, not the frame itself.
+    // is what gets centred in the circle, not the frame itself. Rows at the
+    // bottom that just repeat the row above (art that continues out of the
+    // bottom of the circle, like the bundled parrot's body) don't count.
     _measureFrames() {
-        let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+        let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+        this._frameAspect = 1;
         for (const uri of this._frames) {
             try {
                 const p = GdkPixbuf.Pixbuf.new_from_file(Gio.File.new_for_uri(uri).get_path());
@@ -528,13 +531,24 @@ export default class SkeetExtension extends Extension {
                 const w = p.get_width(), h = p.get_height();
                 const n = p.get_n_channels(), rs = p.get_rowstride();
                 const px = p.get_pixels();
-                for (let y = 0; y < h; y += 2) {
-                    for (let x = 0; x < w; x += 2) {
+                this._frameAspect = h / w;
+                const rowEq = (a, b) => {
+                    for (let i = 0; i < w * n; i++) {
+                        if (px[a * rs + i] !== px[b * rs + i])
+                            return false;
+                    }
+                    return true;
+                };
+                let bottom = h - 1;
+                while (bottom > 0 && rowEq(bottom, bottom - 1))
+                    bottom--;
+                for (let y = 0; y <= bottom; y++) {
+                    for (let x = 0; x < w; x++) {
                         if (px[y * rs + x * n + 3] > 40) {
                             x0 = Math.min(x0, x / w);
                             x1 = Math.max(x1, x / w);
-                            y0 = Math.min(y0, y / h);
-                            y1 = Math.max(y1, y / h);
+                            y0 = Math.min(y0, y / w);
+                            y1 = Math.max(y1, y / w);
                         }
                     }
                 }
@@ -542,7 +556,7 @@ export default class SkeetExtension extends Extension {
                 console.warn(`skeet: could not measure ${uri}: ${e.message}`);
             }
         }
-        return x1 > x0 ? [(x0 + x1) / 2, (y0 + y1) / 2] : [0.5, 0.5];
+        return x1 > x0 ? [(x0 + x1) / 2, (y0 + y1) / 2] : [0.5, this._frameAspect / 2];
     }
 
     // Paint the current frame filling the circle with the drawing centred
@@ -554,10 +568,11 @@ export default class SkeetExtension extends Extension {
             const img = Math.round(big * PARROT_SCALE);
             const [cx, cy] = this._frameCenter;
             const nudge = this._settings.get_int('icon-offset') / 100;
-            const x = Math.round((big - img) / 2 + (0.5 - cx) * img);
-            const y = Math.round((big - img) / 2 + (0.5 - cy) * img + nudge * big);
+            const imgH = Math.round(img * this._frameAspect);
+            const x = Math.round(big / 2 - cx * img);
+            const y = Math.round(big / 2 - cy * img + nudge * big);
             style += ` background-image: url("${this._frames[this._frame]}");` +
-                ` background-size: ${img}px ${img}px;` +
+                ` background-size: ${img}px ${imgH}px;` +
                 ` background-position: ${x}px ${y}px; background-repeat: no-repeat;`;
         }
         this._button.set_style(style);
