@@ -10,7 +10,7 @@ Releases are GitHub releases on [vdbxio/skeet](https://github.com/vdbxio/skeet).
 
        glib-compile-schemas schemas
        gnome-extensions pack --force --extra-source=helper --extra-source=icons \
-           --extra-source=LICENSE --extra-source=install.sh --extra-source=README.md .
+           --extra-source=LICENSE --extra-source=NOTICE --extra-source=install.sh --extra-source=README.md .
        mv skeet@vdbxio.github.io.shell-extension.zip skeet-X.Y.Z.zip
 
 3. `gh release create vX.Y.Z skeet-X.Y.Z.zip --title "Skeet X.Y.Z" --notes-file NOTES.md`

@@ -34,6 +34,8 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 const ACTION_SCALE = 0.75; // Delete/Enter buttons relative to the mic
 const ACTION_GAP = 10;
 const DANCE_MS = 60;
+const PARROT_SCALE = 1.0; // frame size relative to the button
+const PARROT_DROP = 0.06; // how far the frame is moved down, relative to the button
 const EDGE_MARGIN = 10;
 const DRAG_THRESHOLD = 14;
 const TAP_DEBOUNCE_MS = 300;
@@ -84,9 +86,11 @@ export default class SkeetExtension extends Extension {
         this._frames = this._loadFrames();
         this._frame = 0;
         this._danceId = 0;
-        this._icon = new St.Icon({
-            gicon: this._frames[0],
-            style_class: 'skeet-parrot',
+        // The parrot is the button's background image, so St clips it to the
+        // circle and draws the ring on top of it. Without frames, a mic icon.
+        this._icon = this._frames.length ? null : new St.Icon({
+            icon_name: 'audio-input-microphone-symbolic',
+            style_class: 'skeet-icon',
         });
         this._button = new St.Bin({
             style_class: 'skeet',
@@ -500,11 +504,27 @@ export default class SkeetExtension extends Extension {
                 continue;
             }
             const frames = names.filter(n => /\.(png|svg)$/i.test(n)).sort()
-                .map(n => new Gio.FileIcon({file: Gio.File.new_for_path(`${dir}/${n}`)}));
+                .map(n => Gio.File.new_for_path(`${dir}/${n}`).get_uri());
             if (frames.length)
                 return frames;
         }
-        return [new Gio.ThemedIcon({name: 'audio-input-microphone-symbolic'})];
+        return [];
+    }
+
+    // Paint the current frame filling the circle, nudged down so the bird
+    // sits inside the ring rather than poking out of the top.
+    _paintButton() {
+        const big = this._size;
+        let style = `border-radius: ${big / 2}px;`;
+        if (this._frames.length) {
+            const img = Math.round(big * PARROT_SCALE);
+            const x = Math.round((big - img) / 2);
+            const y = Math.round((big - img) / 2 + big * PARROT_DROP);
+            style += ` background-image: url("${this._frames[this._frame]}");` +
+                ` background-size: ${img}px ${img}px;` +
+                ` background-position: ${x}px ${y}px; background-repeat: no-repeat;`;
+        }
+        this._button.set_style(style);
     }
 
     // Static while idle, dancing while recording.
@@ -512,14 +532,14 @@ export default class SkeetExtension extends Extension {
         if (on && !this._danceId && this._frames.length > 1) {
             this._danceId = this._addTimeout(DANCE_MS, () => {
                 this._frame = (this._frame + 1) % this._frames.length;
-                this._icon.gicon = this._frames[this._frame];
+                this._paintButton();
                 return GLib.SOURCE_CONTINUE;
             });
         } else if (!on && this._danceId) {
             this._removeTimeout(this._danceId);
             this._danceId = 0;
             this._frame = 0;
-            this._icon.gicon = this._frames[0];
+            this._paintButton();
         }
     }
 
@@ -528,8 +548,9 @@ export default class SkeetExtension extends Extension {
     _applySize() {
         const big = this._size, small = Math.round(big * ACTION_SCALE);
         this._button.set_size(big, big);
-        this._button.set_style(`border-radius: ${big / 2}px;`);
-        this._icon.icon_size = Math.round(big * 0.72);
+        this._paintButton();
+        if (this._icon)
+            this._icon.icon_size = Math.round(big * 0.47);
         for (const b of [this._deleteButton, this._enterButton]) {
             b.set_size(small, small);
             b.set_style(`border-radius: ${small / 2}px;`);

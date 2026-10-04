@@ -1,4 +1,4 @@
-<p align="center"><img src="icons/parrot-00.svg" width="120" alt="Skeet's parrot"></p>
+<p align="center"><img src="icons/parrot.gif" width="120" alt="Party Parrot"></p>
 
 # Skeet
 
@@ -121,7 +121,6 @@ image and the button cycles through all of them while recording.
   are dropped.
 - `helper/models.py`: model catalogue, checksummed downloads, delete.
 - `helper/setup.sh`: engine setup, safe to re-run.
-- `tools/make-icons.py`: draws the parrot frames in `icons/`.
 
 Logs: `journalctl --user -u skeet`. After editing `extension.js`, log out
 and back in (Wayland); after editing `helper/skeetd.py`,
@@ -137,7 +136,9 @@ and back in (Wayland); after editing `helper/skeetd.py`,
 
 ## Licence
 
-MIT, see `LICENSE`. The parrot in `icons/` is original artwork made for
-Skeet (`tools/make-icons.py`) and is under the same licence. Speech models
-are downloaded separately from the sherpa-onnx releases under their own
-licences (Parakeet: CC-BY-4.0, NVIDIA; Silero VAD: MIT).
+MIT, see `LICENSE`, except the parrot: Party Parrot from
+[cultofthepartyparrot.com](https://cultofthepartyparrot.com), based on
+Sirocco the kākāpō. The parrot images in `icons/` are not covered by the MIT
+licence (see `NOTICE`). Speech models are downloaded separately from the
+sherpa-onnx releases under their own licences (Parakeet: CC-BY-4.0, NVIDIA;
+Silero VAD: MIT).
