@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <enum id="org.gnome.shell.extensions.skeet.Model">
+    <value nick="parakeet-v2-en" value="0"/>
+    <value nick="parakeet-v3" value="1"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.skeet.NoiseFilter">
+    <value nick="off" value="0"/>
+    <value nick="low" value="1"/>
+    <value nick="medium" value="2"/>
+    <value nick="high" value="3"/>
+  </enum>
+  <schema id="org.gnome.shell.extensions.skeet"
+          path="/org/gnome/shell/extensions/skeet/">
+    <key name="model" enum="org.gnome.shell.extensions.skeet.Model">
+      <default>'parakeet-v2-en'</default>
+      <summary>Speech model</summary>
+      <description>parakeet-v2-en: English only, most accurate for English. parakeet-v3: 25 European languages, detected automatically.</description>
+    </key>
+    <key name="live-captions" type="b">
+      <default>true</default>
+      <summary>Show a live caption while recording</summary>
+      <description>Turning this off also saves the CPU spent re-reading the current phrase.</description>
+    </key>
+    <key name="noise-filter" enum="org.gnome.shell.extensions.skeet.NoiseFilter">
+      <default>'medium'</default>
+      <summary>Background noise filter</summary>
+      <description>Drops words that are much quieter than your own voice, such as a TV or people across the room. Higher is stricter.</description>
+    </key>
+    <key name="button-size" type="i">
+      <range min="40" max="120"/>
+      <default>64</default>
+      <summary>Mic button size in pixels</summary>
+    </key>
+    <key name="action-buttons" type="b">
+      <default>true</default>
+      <summary>Show Delete and Enter buttons after text is typed</summary>
+    </key>
+    <key name="action-buttons-timeout" type="i">
+      <range min="3" max="120"/>
+      <default>10</default>
+      <summary>Seconds before the Delete and Enter buttons hide by themselves</summary>
+    </key>
+  </schema>
+</schemalist>

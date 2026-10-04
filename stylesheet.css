@@ -1,0 +1,40 @@
+.skeet {
+  width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  background-color: rgba(24, 24, 28, 0.78);
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.skeet.pressed {
+  background-color: rgba(70, 70, 80, 0.88);
+}
+.skeet.recording {
+  border: 5px solid rgba(232, 48, 48, 0.95);
+}
+.skeet-parrot {
+  icon-size: 46px;
+}
+.skeet-icon {
+  color: #ffffff;
+  icon-size: 30px;
+}
+.skeet-caption {
+  background-color: rgba(18, 18, 22, 0.86);
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.skeet-caption-text {
+  color: #ffffff;
+  font-size: 17px;
+}
+.skeet-caption.placeholder .skeet-caption-text {
+  color: rgba(255, 255, 255, 0.6);
+}
+.skeet.transcribing {
+  border: 5px solid rgba(240, 160, 30, 0.95);
+}
+.skeet-action {
+  background-color: rgba(24, 24, 28, 0.85);
+}

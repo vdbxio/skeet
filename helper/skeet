@@ -1,0 +1,16 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Control the Skeet dictation service (skeetd.py) from a shortcut or
+# script:  skeet --toggle | --start | --stop | --cancel | --delete | --enter
+case "${1:---toggle}" in
+    --toggle) m=Toggle ;;
+    --start) m=Start ;;
+    --stop) m=Stop ;;
+    --cancel) m=Cancel ;;
+    --delete) m=DeleteLast ;;
+    --enter) m=PressEnter ;;
+    *) echo "usage: skeet [--toggle|--start|--stop|--cancel|--delete|--enter]" >&2; exit 2 ;;
+esac
+exec gdbus call --session --dest io.github.vdbxio.Skeet \
+    --object-path /io/github/vdbxio/Skeet \
+    --method "io.github.vdbxio.Skeet.$m" >/dev/null

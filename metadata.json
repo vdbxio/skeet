@@ -1,0 +1,9 @@
+{
+  "uuid": "skeet@vdbxio.github.io",
+  "name": "Skeet",
+  "description": "Touchscreen dictation for Wayland. A floating parrot button: tap it, talk, tap again, and the text is typed where your cursor is. Offline speech recognition (NVIDIA Parakeet via sherpa-onnx) with a live caption, a background noise filter, and Delete and Enter buttons after each dictation.\n\nNeeds a one-time setup of the speech engine, a model download and ydotool; open the extension's settings.",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.skeet",
+  "version": 1,
+  "url": "https://github.com/vdbxio/skeet"
+}
