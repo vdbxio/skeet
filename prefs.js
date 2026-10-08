@@ -317,6 +317,31 @@ export default class SkeetPrefs extends ExtensionPreferences {
         settings.connect('changed::noise-filter', syncFilter);
         noise.add(filterRow);
 
+        // ---- dictionary ----
+        const dict = new Adw.PreferencesGroup({
+            title: 'Dictionary',
+            description: 'Names Skeet should always spell your way, like products ' +
+                'or people. One per line: Right Spelling = what it types instead.',
+        });
+        page.add(dict);
+        const dictRow = new Adw.ActionRow({
+            title: 'Edit dictionary',
+            subtitle: '~/.config/skeet/dictionary.txt',
+            activatable: true,
+        });
+        dictRow.add_suffix(new Gtk.Image({icon_name: 'document-edit-symbolic'}));
+        dictRow.connect('activated', () => {
+            const path = GLib.build_filenamev([GLib.get_user_config_dir(), 'skeet', 'dictionary.txt']);
+            if (!GLib.file_test(path, GLib.FileTest.EXISTS)) {
+                GLib.mkdir_with_parents(GLib.path_get_dirname(path), 0o755);
+                GLib.file_set_contents(path,
+                    '# Skeet dictionary. One entry per line:\n' +
+                    '#   Right Spelling = what Skeet types instead, another, ...\n\n');
+            }
+            Gio.AppInfo.launch_default_for_uri(GLib.filename_to_uri(path, null), null);
+        });
+        dict.add(dictRow);
+
         // ---- button ----
         const look = new Adw.PreferencesGroup({title: 'Button'});
         page.add(look);

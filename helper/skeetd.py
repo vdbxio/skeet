@@ -17,6 +17,10 @@ D-Bus (session): io.github.vdbxio.Skeet at /io/github/vdbxio/Skeet
 Settings come from the extension's GSettings schema (../schemas): model,
 live-captions, noise-filter. Changing the model reloads it.
 
+Names the model can't spell (products, people, jargon) go in the dictionary,
+~/.config/skeet/dictionary.txt, applied to every caption and to the typed
+text; it's re-read whenever it changes.
+
 While recording, Silero VAD cuts the audio into utterances. Each finished
 utterance is decoded once, for good; the one still being spoken is re-decoded
 about once a second for the caption. On stop only that last piece is left to
@@ -80,6 +84,20 @@ sys.path.insert(0, HERE)
 from models import MODELS  # noqa: E402  (the catalogue models.py downloads)
 VAD_MODEL = os.path.join(DATA_DIR, "models", "silero_vad.onnx")
 LEVEL_FILE = os.path.join(GLib.get_user_state_dir(), "skeet", "voice-level")
+LAST_TAKE = os.path.join(GLib.get_user_state_dir(), "skeet", "last-take.wav")
+DICT_FILE = os.path.join(GLib.get_user_config_dir(), "skeet", "dictionary.txt")
+DICT_HEADER = """\
+# Skeet dictionary: words the speech model doesn't spell the way you want.
+#
+# One entry per line:
+#   Right Spelling = what Skeet types instead, another thing it types, ...
+# Matching ignores case, and spaces, hyphens, apostrophes, underscores and
+# dots inside a name, so "Pipe Wire", "pipewire" and "pipe-wire" are all one thing.
+# An entry with nothing after it only fixes the capitals:
+#   GitHub
+# Lines starting with # are ignored. Changes apply to the next dictation.
+
+"""
 
 KEY_BACKSPACE = 14
 KEY_ENTER = 28
@@ -121,6 +139,68 @@ def clean(parts):
     # A filler removed mid-utterance can leave a sentence starting lowercase.
     out = re.sub(r"([.?!]\s+)([a-z])", lambda m: m[1] + m[2].upper(), out)
     return re.sub(r"\s{2,}", " ", out).strip()
+
+
+class Dictionary:
+    """Right spellings for names the model gets wrong, from DICT_FILE."""
+
+    SEP = r"[\s\-_'’.]{0,2}"
+
+    def __init__(self, path=DICT_FILE):
+        self.path = path
+        self.mtime = None
+        self.regex = None
+        self.fixes = {}
+
+    @staticmethod
+    def key(text):
+        return re.sub(r"[\W_]+", "", text.lower())
+
+    def _load(self):
+        try:
+            mtime = os.stat(self.path).st_mtime_ns
+        except OSError:
+            if not os.path.exists(os.path.dirname(self.path)):
+                os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            try:
+                with open(self.path, "x") as f:
+                    f.write(DICT_HEADER)
+            except OSError:
+                pass
+            mtime = None
+        if mtime == self.mtime:
+            return
+        self.mtime, self.fixes = mtime, {}
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            right, _, heard = line.partition("=")
+            right = right.strip()
+            for alias in [right, *heard.split(",")]:
+                k = self.key(alias)
+                if right and k:
+                    self.fixes[k] = right
+        # Longest first, so "ms visual studio" wins over "visual studio".
+        alts = [self.SEP.join(map(re.escape, k))
+                for k in sorted(self.fixes, key=len, reverse=True)]
+        self.regex = (re.compile(r"(?<![^\W_])(?:" + "|".join(alts) + r")(?![^\W_])", re.I)
+                      if alts else None)
+        log(f"skeetd: dictionary: {len(set(self.fixes.values()))} entries")
+
+    def apply(self, text):
+        try:
+            self._load()
+        except Exception as e:  # a bad dictionary must never stop dictation
+            log(f"skeetd: dictionary not loaded: {e!r}")
+        if not self.regex or not text:
+            return text
+        return self.regex.sub(lambda m: self.fixes.get(self.key(m[0]), m[0]), text)
 
 
 def load_settings():
@@ -264,7 +344,7 @@ class Session:
 
     def _work_inner(self):
         pipe = Pipeline(self.rec, self.d.filter_margin(), self.d.voice_level,
-                        self.d.live_captions)
+                        self.d.live_captions, self.d.dictionary)
         while True:
             try:
                 buf = self.q.get(timeout=0.1)
@@ -288,6 +368,10 @@ class Session:
         if pipe.words and final:
             self.d.remember_level(pipe.voice_level())
         log(f"skeetd: {pipe.seconds:.1f}s -> {final!r}")
+        if pipe.dropped or pipe.skipped:
+            log(f"skeetd: noise filter dropped {' '.join(pipe.dropped).strip()!r}"
+                f" and skipped {pipe.skipped:.1f}s of quiet speech")
+        save_take(pipe.audio)
         GLib.idle_add(self.d.caption, self, final)
         typed = ""
         if final:
@@ -299,6 +383,21 @@ class Session:
                 GLib.idle_add(self.d.error, f"Could not type the text: {e}. "
                               "Is the ydotool service running?")
         GLib.idle_add(self.d.finished, self, typed)
+
+
+def save_take(audio):
+    """Keep the last recording (only that one) so a bad transcript can be
+    looked into with --test-file."""
+    import wave
+    try:
+        os.makedirs(os.path.dirname(LAST_TAKE), exist_ok=True)
+        with wave.open(LAST_TAKE, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(RATE)
+            w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
+    except Exception as e:
+        log(f"skeetd: could not keep the last take: {e!r}")
 
 
 def level_db(samples):
@@ -328,8 +427,9 @@ class Pipeline:
        words. Whole segments that quiet aren't even decoded.
     """
 
-    def __init__(self, rec, margin, prior_level, live_captions):
+    def __init__(self, rec, margin, prior_level, live_captions, dictionary=None):
         self.rec = rec
+        self.dictionary = dictionary
         self.margin = margin  # dB, or None for no near-field filter
         self.prior = prior_level  # dBFS from earlier recordings, or None
         self.live_captions = live_captions
@@ -342,6 +442,8 @@ class Pipeline:
         self.last_caption = 0.0
         self.caption_cost = 0.0
         self.shown = None
+        self.dropped = []  # words the near-field filter took out
+        self.skipped = 0  # seconds of speech too quiet to decode
 
     @property
     def seconds(self):
@@ -378,12 +480,15 @@ class Pipeline:
     def _filter(self, words):
         ref = self.voice_level(words[len(self.words):] if words is not self.words else ())
         quiet = [self._quiet(lv, ref) or lv < ABS_FLOOR for _, lv in words]
-        keep = []
+        keep, self.dropped = [], []
         for i, (w, _) in enumerate(words):
             run = quiet[i] and ((i > 0 and quiet[i - 1]) or (i + 1 < len(words) and quiet[i + 1]))
             if not run and not (quiet[i] and len(words) == 1):
                 keep.append(w)
-        return clean(["".join(keep)])
+            else:
+                self.dropped.append(w)
+        text = clean(["".join(keep)])
+        return self.dictionary.apply(text) if self.dictionary else text
 
     def feed(self, x):
         if not len(x):
@@ -435,6 +540,8 @@ class Pipeline:
         # Don't spend a decode on a segment that is clearly background.
         if level > ABS_FLOOR and not self._quiet(level, self.voice_level()):
             self.words += self._decode(start, end)
+        else:
+            self.skipped += (end - start) / RATE
         self.done_to = end
 
     def step(self):
@@ -480,6 +587,7 @@ class Daemon:
         self.last_typed = ""
         self.loading = False
         self.settings = load_settings()
+        self.dictionary = Dictionary()
         self.voice_level = self._read_level()
         if self.settings:
             self.settings.connect("changed::model", lambda *_: self.load_model())
@@ -690,7 +798,7 @@ def test_files(args):
     for path in args.test_file:
         with wave.open(path) as w:
             x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
-        pipe = Pipeline(rec, margin, args.level, lambda: False)
+        pipe = Pipeline(rec, margin, args.level, lambda: False, Dictionary())
         for i in range(0, len(x), CHUNK):
             pipe.feed(x[i:i + CHUNK])
             pipe.step()
@@ -698,6 +806,9 @@ def test_files(args):
         lvl = pipe.voice_level()
         print(f"{os.path.basename(path)} [voice {lvl if lvl is None else round(lvl, 1)} dB]"
               f"\n  {text}", flush=True)
+        if pipe.dropped or pipe.skipped:
+            print(f"  dropped {' '.join(pipe.dropped).strip()!r},"
+                  f" skipped {pipe.skipped:.1f}s", flush=True)
 
 
 if __name__ == "__main__":

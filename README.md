@@ -102,6 +102,28 @@ microphone; **High** is stricter but can drop your own quiet trailing words;
 loudness. Turning on your microphone's noise suppression (for example
 PipeWire's WebRTC echo-cancel module) helps with steady noise like fans.
 
+If words go missing, the journal (`journalctl --user -u skeet`) lists what
+the filter dropped after each dictation, and the last recording is kept in
+`~/.local/state/skeet/last-take.wav` so you can try it again with
+`helper/skeetd.py --test-file` and a different `--filter`.
+
+## Dictionary
+
+Product names, people and jargon the model can't spell go in
+`~/.config/skeet/dictionary.txt` (Settings → Dictionary → Edit dictionary).
+One entry per line, the right spelling first, then what Skeet types instead:
+
+```
+PipeWire = pipe wire, pipewire
+Siobhan = shivon, shavon
+GitHub
+```
+
+Case, spaces, hyphens, apostrophes, underscores and dots inside a name are
+ignored when matching, so `pipe wire` also catches "Pipe-Wire" and "pipewire". A
+name on its own only fixes its capitals. The file is re-read when it
+changes; the fixes apply to the live caption and the typed text.
+
 ## Your own button image
 
 Put PNG or SVG frames in `~/.local/share/skeet/icon/` (sorted by name, e.g.
